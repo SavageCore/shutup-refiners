@@ -38,7 +38,7 @@ AMUMSS_LINUX ?= $(HOME)/Git/AMUMSS/linux
 # artifact is named after the mod alone (see FOMOD_ZIP), because a mod manager
 # names the installed mod after the archive file name and shows the version in
 # a column of its own.
-VERSION      := 0.0.0
+VERSION      := 0.1.0
 
 MOD_SET      := Shut Up Refiners
 
