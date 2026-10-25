@@ -1,0 +1,31 @@
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Shut Up Refiners</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Which refiners to mute">
+      <optionalFileGroups order="Explicit">
+        <group name="Refiners" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Refiners">
+              <description>Silences the small, medium and large refiner you place on a planet</description>
+              <files>
+                <folder source="Refiners" destination="Shut Up Refiners - Refiners" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Refiners and Personal Refiner">
+              <description>Silences those, and the Personal Refiner in your Exosuit inventory</description>
+              <files>
+                <folder source="Refiners and Personal Refiner" destination="Shut Up Refiners - Refiners and Personal Refiner" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

@@ -1,0 +1,167 @@
+-- Shut Up Refiners - @VARIANT_LABEL@
+-- RENDERED FILE - do not edit; edit src/shutuprefiners.lua.in and run make release.
+--
+-- Updated by SavageCore
+--
+-- Approach: point the refiner Wwise events at an event name that does not
+-- exist. Wwise returns an invalid handle for an unknown event, so nothing is
+-- posted and the refiner runs silently.
+
+local VariantLabel = "@VARIANT_LABEL@"
+
+local ModDesc = "@DESC@"
+
+local ModName     = "Shut Up Refiners"
+local ModAuthor   = "SavageCore"
+local GameVersion = "v7.04" -- Cosmos
+
+-- Sentinel for "post nothing". NMS itself uses this exact string in
+-- GcAudioWwiseEvents/AkEvent to mean "no event", so it cannot collide with a
+-- real Wwise event name.
+local MuteEvent = "INVALID_EVENT"
+
+-- The entity files this mod can patch, keyed by the name the Makefile uses to
+-- select them.
+--
+-- REFINER1 to REFINER3 are the refiners you place on a planet. PLAYERCHARACTER
+-- is the personal refiner on your suit: it lives in the player character
+-- entity, which is why it needs its own entry even though it posts the exact
+-- same Wwise events as the small refiner.
+--
+-- The small refiner and the exosuit refiner both have a REFINE_NOFUEL state
+-- that is deliberately left alone: it is the cue the player gets when the
+-- refiner runs dry, and they asked to keep it. REFINE_NOFUEL posts the same
+-- Obj_PortableRefinery_Stop event as REFINE_STOP, so the two cannot be told
+-- apart by event name and the state has to be named explicitly.
+--
+-- These names, states and counts are game data, not constants this mod owns.
+-- The expected count of muted sounds per file lives in the Makefile, in
+-- TARGET_WANT_*, and make verify asserts it, so a game update that renames,
+-- reorders or adds a refiner sound fails loudly instead of quietly muting half
+-- of them.
+local Targets = {
+    REFINER1 = {
+        Dir  = "MODELS/PLANETS/BIOMES/COMMON/BUILDINGS/PARTS/BUILDABLEPARTS/TECH/REFINER/ENTITIES",
+        File = "REFINER1.ENTITY.MBIN",
+        Tier = "small",
+        Events = {
+            {State = "REFINE_START", Sound = "Obj_PortableRefinery_Start"},
+            {State = "REFINE_STOP",  Sound = "Obj_PortableRefinery_Stop"},
+        },
+    },
+    REFINER2 = {
+        Dir  = "MODELS/PLANETS/BIOMES/COMMON/BUILDINGS/PARTS/BUILDABLEPARTS/TECH/REFINER/ENTITIES",
+        File = "REFINER2.ENTITY.MBIN",
+        Tier = "medium",
+        Events = {
+            {State = "REFINE_START", Sound = "Obj_RefineryMedium_Start"},
+            {State = "REFINE_STOP",  Sound = "Obj_RefineryMedium_Stop"},
+        },
+    },
+    REFINER3 = {
+        Dir  = "MODELS/PLANETS/BIOMES/COMMON/BUILDINGS/PARTS/BUILDABLEPARTS/TECH/REFINER/ENTITIES",
+        File = "REFINER3.ENTITY.MBIN",
+        Tier = "large",
+        Events = {
+            {State = "REFINE_START", Sound = "Obj_RefineryLarge_Start"},
+            {State = "REFINE_STOP",  Sound = "Obj_RefineryLarge_Stop"},
+        },
+    },
+    PLAYERCHARACTER = {
+        Dir  = "MODELS/COMMON/PLAYER/PLAYERCHARACTER/PLAYERCHARACTER/ENTITIES",
+        File = "PLAYERCHARACTER.ENTITY.MBIN",
+        Tier = "exosuit",
+        Events = {
+            {State = "REFINE_START", Sound = "Obj_PortableRefinery_Start"},
+            {State = "REFINE_STOP",  Sound = "Obj_PortableRefinery_Stop"},
+        },
+    },
+}
+
+-- The targets this variant patches. Substituted by the Makefile.
+local VariantTargets = { @FILES@ }
+
+-- One change block per (target, state). The path down to a sound is
+--   Components
+--     Components (GcTriggerActionComponentData)
+--       GcTriggerActionComponentData
+--         States
+--           States (GcActionTriggerState _id=REFINE_START)
+--             Triggers
+--               Triggers (GcActionTrigger _index=0)
+--                 Action
+--                   Action (GcPlayAudioAction)
+--                     GcPlayAudioAction
+--                       Sound (the event name)
+--
+-- Every intermediate level is deliberately omitted. AMUMSS scans the lines of
+-- the section it is already inside, so naming a node pins that section to it
+-- and the next pair narrows it further. Naming every level would only make the
+-- path longer and more brittle across game updates.
+--
+-- The States pair is the interesting one. AMUMSS matches a keyword as
+-- E="NAME" VALUE="VALUE" and the states are distinguished only by their _id
+-- attribute, which is not part of that form. The value slot is therefore given
+-- the rest of the line, so the search becomes
+--
+--   E="STATES" VALUE="GCACTIONTRIGGERSTATE" _ID="REFINE_START"
+--
+-- which matches exactly one state. AMUMSS uppercases both the line and the
+-- keyword before comparing, so the case used here does not matter. This does
+-- lean on MBINCompiler writing the attributes in the order name, value, _id
+-- with a single space between them. If that ever changes the path stops
+-- matching, AMUMSS makes 0 changes, and make verify fails on the count rather
+-- than shipping a patch that mutes the wrong state.
+--
+-- The wrapper between Action and Sound, <Property name="GcPlayAudioAction">,
+-- carries no value attribute and is deliberately NOT used as a keyword. The
+-- same "no value attribute" problem means AMUMSS has no keyword form that
+-- addresses it, so the path has to skip straight from Action to Sound.
+--
+-- SECTION_UP = 1 steps back out of Sound to its parent, the
+-- GcPlayAudioAction wrapper, because VALUE_CHANGE_TABLE addresses the children
+-- of the matched node rather than the node itself. The wrapper's only string
+-- child is Sound, so this is unambiguous.
+local MbinChangeTable = {}
+
+for _, key in ipairs(VariantTargets) do
+    local target = Targets[key]
+    local blocks = {}
+
+    for _, ev in ipairs(target.Events) do
+        blocks[#blocks + 1] = {
+            ["SPECIAL_KEY_WORDS"]  = {
+                "Components", "GcTriggerActionComponentData",
+                "States",     [[GcActionTriggerState" _id="]] .. ev.State,
+                "Action",     "GcPlayAudioAction",
+                "Sound",      ev.Sound
+            },
+            ["SECTION_UP"]         = 1,
+            ["REPLACE_TYPE"]       = "ALL",
+            ["VALUE_CHANGE_TABLE"] = {{"Sound", MuteEvent}},
+        }
+    end
+
+    -- Each MBIN_CHANGE_TABLE entry needs its own MXML_CHANGE_TABLE, and
+    -- MXML_CHANGE_TABLE is a LIST of change blocks even when there is only one,
+    -- so the block list is wrapped in an outer table here. Handing AMUMSS a bare
+    -- block instead makes it report "MXML_CHANGE_TABLE does not contain any
+    -- usable TABLE", make 0 changes, and ship nothing.
+    MbinChangeTable[#MbinChangeTable + 1] = {
+        ["MBIN_FILE_SOURCE"]  = {target.Dir.."/"..target.File},
+        ["MXML_CHANGE_TABLE"] = blocks,
+    }
+end
+
+NMS_MOD_DEFINITION_CONTAINER = {
+    ["MOD_FILENAME"]    = ModName.." - "..VariantLabel..".pak",
+    ["MOD_DESCRIPTION"] = ModDesc,
+    ["MOD_AUTHOR"]      = ModAuthor,
+    ["NMS_VERSION"]     = GameVersion,
+    ["MODIFICATIONS"]   =
+    {
+        {
+            ["MBIN_CHANGE_TABLE"] = MbinChangeTable,
+        },
+    },
+}
