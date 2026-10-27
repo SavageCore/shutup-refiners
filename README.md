@@ -151,7 +151,7 @@ for path in sorted(glob.glob('/tmp/probe/**/refiner*.entity.MXML', recursive=Tru
 EOF
 ```
 
-Expected as of v7.04:
+Expected as of v7.06:
 
 ```
 refiner1.entity.MXML
